@@ -46,7 +46,7 @@ jobs:
       - name: Generate current state file
         run: |
           terraform refresh
-          terraform show -json > current-state.tfstate
+          cp terraform.tfstate current-state.tfstate
 
       - name: Run Drift Detection on Current State
         id: current-check
