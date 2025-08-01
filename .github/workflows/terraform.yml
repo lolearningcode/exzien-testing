@@ -47,38 +47,38 @@ jobs:
       - name: Pull Remote State
         run: terraform state pull > terraform.tfstate
 
-      # - name: Run Drift Detection BEFORE Apply
-      #   id: pre-check
-      #   run: |
-      #     echo "🔍 Checking for drift BEFORE apply..."
-      #     response=$(curl -s -w "%{http_code}" \
-      #       -X POST ${{ env.EXZIEN_API_URL }}/v1/drift-check \
-      #       -H "Authorization: Bearer ${{ secrets.EXZIEN_API_TOKEN }}" \
-      #       -F "state_file=@terraform.tfstate" \
-      #       -F "cloud_provider=aws" \
-      #       -F "project_id=${{ github.repository }}" \
-      #       -F "env=${{ github.event.inputs.environment || 'staging' }}" \
-      #       -F "scan_name=Pre-Deployment Check - $GITHUB_RUN_ID" \
-      #       -F "aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}" \
-      #       -F "aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}")
+      - name: Run Drift Detection BEFORE Apply
+        id: pre-check
+        run: |
+          echo "🔍 Checking for drift BEFORE apply..."
+          response=$(curl -s -w "%{http_code}" \
+            -X POST ${{ env.EXZIEN_API_URL }}/v1/drift-check \
+            -H "Authorization: Bearer ${{ secrets.EXZIEN_API_TOKEN }}" \
+            -F "state_file=@terraform.tfstate" \
+            -F "cloud_provider=aws" \
+            -F "project_id=${{ github.repository }}" \
+            -F "env=${{ github.event.inputs.environment || 'staging' }}" \
+            -F "scan_name=Pre-Deployment Check - $GITHUB_RUN_ID" \
+            -F "aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}" \
+            -F "aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}")
 
-      #     http_code="${response: -3}"
-      #     body="${response%???}"
-      #     echo "HTTP Status: $http_code"
-      #     echo "Response: $body"
+          http_code="${response: -3}"
+          body="${response%???}"
+          echo "HTTP Status: $http_code"
+          echo "Response: $body"
 
-      #     if [ "$http_code" -ne 200 ]; then
-      #       echo "::error::API request failed with status $http_code"
-      #       exit 1
-      #     fi
+          if [ "$http_code" -ne 200 ]; then
+            echo "::error::API request failed with status $http_code"
+            exit 1
+          fi
 
-      #     drift_detected=$(echo "$body" | jq -r '.drift_detected')
-      #     if [ "$drift_detected" = "true" ]; then
-      #       echo "::error::Drift detected before apply"
-      #       exit 1
-      #     else
-      #       echo "✅ No drift detected before apply."
-      #     fi
+          drift_detected=$(echo "$body" | jq -r '.drift_detected')
+          if [ "$drift_detected" = "true" ]; then
+            echo "::error::Drift detected before apply"
+            exit 1
+          else
+            echo "✅ No drift detected before apply."
+          fi
 
       - name: Terraform Apply
         run: terraform apply -auto-approve
