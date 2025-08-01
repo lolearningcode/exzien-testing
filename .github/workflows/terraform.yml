@@ -21,8 +21,8 @@ env:
   EXZIEN_API_URL: "https://terraform-drift-detector-iosdevcleo.replit.app"
 
 jobs:
-  post-deployment-drift-check:
-    name: Post-Deployment Drift Check
+  drift-detection-and-deploy:
+    name: Drift Check + Apply
     runs-on: ubuntu-latest
 
     steps:
@@ -44,15 +44,13 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
-      - name: Terraform Apply
-        run: terraform apply -auto-approve
-
-      - name: Pull remote state to local file
+      - name: Pull Remote State
         run: terraform state pull > terraform.tfstate
 
-      - name: Run Drift Detection Before Apply
+      - name: Run Drift Detection BEFORE Apply
+        id: pre-check
         run: |
-          echo "🔍 Checking for drift before apply..."
+          echo "🔍 Checking for drift BEFORE apply..."
           response=$(curl -s -w "%{http_code}" \
             -X POST ${{ env.EXZIEN_API_URL }}/v1/drift-check \
             -H "Authorization: Bearer ${{ secrets.EXZIEN_API_TOKEN }}" \
@@ -76,24 +74,30 @@ jobs:
 
           drift_detected=$(echo "$body" | jq -r '.drift_detected')
           if [ "$drift_detected" = "true" ]; then
-            echo "::warning::Drift detected before apply."
+            echo "::error::Drift detected before apply"
+            exit 1
           else
-            echo "✅ No drift detected."
+            echo "✅ No drift detected before apply."
           fi
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
+
+      - name: Pull Remote State Again
+        run: terraform state pull > terraform.tfstate
 
       - name: Validate terraform.tfstate exists
         run: |
           echo "Verifying terraform.tfstate is present..."
-          ls -la
           if [ ! -f terraform.tfstate ]; then
             echo "::error::Missing terraform.tfstate file"
             exit 1
           fi
 
-      - name: Run Drift Detection After Apply
+      - name: Run Drift Detection AFTER Apply
         id: post-check
         run: |
-          echo "🔍 Checking for drift after deployment..."
+          echo "🔍 Checking for drift AFTER deployment..."
           response=$(curl -s -w "%{http_code}" \
             -X POST ${{ env.EXZIEN_API_URL }}/v1/drift-check \
             -H "Authorization: Bearer ${{ secrets.EXZIEN_API_TOKEN }}" \
