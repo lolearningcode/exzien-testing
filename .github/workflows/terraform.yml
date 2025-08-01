@@ -50,6 +50,37 @@ jobs:
       - name: Pull remote state to local file
         run: terraform state pull > terraform.tfstate
 
+      - name: Run Drift Detection Before Apply
+        run: |
+          echo "🔍 Checking for drift before apply..."
+          response=$(curl -s -w "%{http_code}" \
+            -X POST ${{ env.EXZIEN_API_URL }}/v1/drift-check \
+            -H "Authorization: Bearer ${{ secrets.EXZIEN_API_TOKEN }}" \
+            -F "state_file=@terraform.tfstate" \
+            -F "cloud_provider=aws" \
+            -F "project_id=${{ github.repository }}" \
+            -F "env=${{ github.event.inputs.environment || 'staging' }}" \
+            -F "scan_name=Pre-Deployment Check - $GITHUB_RUN_ID" \
+            -F "aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}" \
+            -F "aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}")
+
+          http_code="${response: -3}"
+          body="${response%???}"
+          echo "HTTP Status: $http_code"
+          echo "Response: $body"
+
+          if [ "$http_code" -ne 200 ]; then
+            echo "::error::API request failed with status $http_code"
+            exit 1
+          fi
+
+          drift_detected=$(echo "$body" | jq -r '.drift_detected')
+          if [ "$drift_detected" = "true" ]; then
+            echo "::warning::Drift detected before apply."
+          else
+            echo "✅ No drift detected."
+          fi
+
       - name: Validate terraform.tfstate exists
         run: |
           echo "Verifying terraform.tfstate is present..."
