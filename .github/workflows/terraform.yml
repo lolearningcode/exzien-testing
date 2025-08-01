@@ -47,8 +47,14 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve
 
-      - name: Export Current State
-        run: terraform show -json > current-state.tfstate
+      - name: Validate terraform.tfstate exists
+        run: |
+          echo "Verifying terraform.tfstate is present..."
+          ls -la
+          if [ ! -f terraform.tfstate ]; then
+            echo "::error::Missing terraform.tfstate file"
+            exit 1
+          fi
 
       - name: Run Drift Detection After Apply
         id: post-check
