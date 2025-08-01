@@ -21,9 +21,10 @@ env:
   EXZIEN_API_URL: "https://terraform-drift-detector-iosdevcleo.replit.app"
 
 jobs:
-  pre-deployment-check:
-    name: Pre-Deployment Drift Check
+  post-deployment-drift-check:
+    name: Post-Deployment Drift Check
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -43,36 +44,41 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
-      - name: Generate Terraform Plan
-        run: |
-          terraform plan -out=tfplan
-          terraform show -json tfplan > terraform-plan.json
+      - name: Terraform Apply
+        run: terraform apply -auto-approve
 
-      - name: Run Drift Detection on Plan
-        id: pre-check
+      - name: Export Current State
+        run: terraform show -json > current-state.tfstate
+
+      - name: Run Drift Detection After Apply
+        id: post-check
         run: |
-          echo "🔍 Validating planned changes before deployment..."
+          echo "🔍 Checking for drift after deployment..."
           response=$(curl -s -w "%{http_code}" \
             -X POST ${{ env.EXZIEN_API_URL }}/v1/drift-check \
             -H "Authorization: Bearer ${{ secrets.EXZIEN_API_TOKEN }}" \
-            -F "state_file=@terraform-plan.json" \
+            -F "state_file=@current-state.tfstate" \
             -F "cloud_provider=aws" \
             -F "project_id=${{ github.repository }}" \
             -F "env=${{ github.event.inputs.environment || 'staging' }}" \
-            -F "scan_name=Pre-Deployment Check - PR#${{ github.event.number }}" \
+            -F "scan_name=Post-Deployment Check - $GITHUB_RUN_ID" \
             -F "aws_access_key_id=${{ secrets.AWS_ACCESS_KEY_ID }}" \
             -F "aws_secret_access_key=${{ secrets.AWS_SECRET_ACCESS_KEY }}")
+          
           http_code="${response: -3}"
           body="${response%???}"
           echo "HTTP Status: $http_code"
           echo "Response: $body"
+
           if [ "$http_code" -ne 200 ]; then
             echo "::error::API request failed with status $http_code"
             exit 1
           fi
+
           drift_detected=$(echo "$body" | jq -r '.drift_detected')
           drift_count=$(echo "$body" | jq -r '.resource_drift_count')
           scan_id=$(echo "$body" | jq -r '.scan_id')
+
           echo "drift_detected=$drift_detected" >> $GITHUB_OUTPUT
           echo "drift_count=$drift_count" >> $GITHUB_OUTPUT
           echo "scan_id=$scan_id" >> $GITHUB_OUTPUT
