@@ -47,6 +47,9 @@ jobs:
       - name: Terraform Apply
         run: terraform apply -auto-approve
 
+      - name: Pull remote state to local file
+        run: terraform state pull > terraform.tfstate
+
       - name: Validate terraform.tfstate exists
         run: |
           echo "Verifying terraform.tfstate is present..."
